@@ -293,7 +293,50 @@ class Controller {
     this.recognition.start();
   }
 
- async processAmbientDump() {
+// Resilient multi-model caller with automatic fallback
+  async callGemini(payload) {
+    const candidateModels = [
+      "gemini-flash-latest",
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-1.5-flash-latest"
+    ];
+
+    let lastError = null;
+
+    for (const model of candidateModels) {
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const json = await res.json();
+        if (json.error) {
+          // If model was not found, fall through to try next candidate
+          if (json.error.code === 404 || json.error.message?.includes("not found")) {
+            lastError = json.error.message;
+            continue;
+          }
+          throw new Error(json.error.message);
+        }
+
+        if (json.candidates?.[0]?.content?.parts?.[0]?.text) {
+          return JSON.parse(json.candidates[0].content.parts[0].text);
+        }
+      } catch (err) {
+        if (err.message && !err.message.includes("not found")) {
+          throw err;
+        }
+        lastError = err.message;
+      }
+    }
+
+    throw new Error(lastError || "Could not find a supported Gemini model for this API key.");
+  }
+
+  async processAmbientDump() {
     const field = document.getElementById("raw-input");
     const text = field.value.trim();
     if (!text) return;
@@ -308,54 +351,37 @@ class Controller {
 
     try {
       const todayStr = new Date().toISOString().split("T")[0];
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.geminiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `Today is ${todayStr}. Deconstruct this ADHD brain dump into physical action items: "${text}"`
-            }]
-          }],
-          generationConfig: {
-            response_mime_type: "application/json",
-            response_schema: {
-              type: "OBJECT",
-              properties: {
-                parsed_actions: {
-                  type: "ARRAY",
-                  items: {
-                    type: "OBJECT",
-                    properties: {
-                      title: { "type": "STRING" },
-                      domain: { "type": "STRING", "enum": ["Work", "Personal Growth", "Health"] },
-                      batch_type: { "type": "STRING", "enum": ["None", "Calls & Messages", "Quick Admin", "Errands & Shopping"] },
-                      estimated_mins: { "type": "INTEGER" },
-                      is_hard_deadline: { "type": "BOOLEAN" },
-                      due_date: { "type": "STRING" }
-                    },
-                    required: ["title", "domain", "batch_type", "estimated_mins", "is_hard_deadline"]
-                  }
+      const payload = await this.callGemini({
+        contents: [{
+          parts: [{
+            text: `Today is ${todayStr}. Deconstruct this ADHD brain dump into physical action items: "${text}"`
+          }]
+        }],
+        generationConfig: {
+          response_mime_type: "application/json",
+          response_schema: {
+            type: "OBJECT",
+            properties: {
+              parsed_actions: {
+                type: "ARRAY",
+                items: {
+                  type: "OBJECT",
+                  properties: {
+                    title: { "type": "STRING" },
+                    domain: { "type": "STRING", "enum": ["Work", "Personal Growth", "Health"] },
+                    batch_type: { "type": "STRING", "enum": ["None", "Calls & Messages", "Quick Admin", "Errands & Shopping"] },
+                    estimated_mins: { "type": "INTEGER" },
+                    is_hard_deadline: { "type": "BOOLEAN" },
+                    due_date: { "type": "STRING" }
+                  },
+                  required: ["title", "domain", "batch_type", "estimated_mins", "is_hard_deadline"]
                 }
-              },
-              required: ["parsed_actions"]
-            }
+              }
+            },
+            required: ["parsed_actions"]
           }
-        })
+        }
       });
-
-      const json = await res.json();
-      
-      // If Google returned an API error, show the exact message
-      if (json.error) {
-        throw new Error(json.error.message || JSON.stringify(json.error));
-      }
-
-      if (!json.candidates || !json.candidates[0]?.content?.parts?.[0]?.text) {
-        throw new Error("Gemini returned an empty candidate list. Try rephrasing.");
-      }
-
-      const payload = JSON.parse(json.candidates[0].content.parts[0].text);
 
       const existingActions = await this.db.getAllActions();
       for (const item of payload.parsed_actions) {
@@ -400,29 +426,22 @@ async shrinkStep(id) {
     if (!action) return;
 
     try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.geminiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `Make this task an absurdly simple, immediate 2-minute starter action: "${action.title}"`
-            }]
-          }],
-          generationConfig: {
-            response_mime_type: "application/json",
-            response_schema: {
-              type: "OBJECT",
-              properties: { "micro_step": { "type": "STRING" } },
-              required: ["micro_step"]
-            }
+      const output = await this.callGemini({
+        contents: [{
+          parts: [{
+            text: `Make this task an absurdly simple, immediate 2-minute starter action: "${action.title}"`
+          }]
+        }],
+        generationConfig: {
+          response_mime_type: "application/json",
+          response_schema: {
+            type: "OBJECT",
+            properties: { "micro_step": { "type": "STRING" } },
+            required: ["micro_step"]
           }
-        })
+        }
       });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error.message);
-      
-      const output = JSON.parse(data.candidates[0].content.parts[0].text);
+
       action.title = output.micro_step;
       action.estimated_mins = 2;
       await this.db.saveAllActions(actions);
