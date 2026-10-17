@@ -20,22 +20,22 @@
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
-    body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; padding-bottom: 5rem; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; padding-bottom: 6rem; }
 
-    .app-container { max-width: 1000px; margin: 0 auto; padding: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+    .app-container { max-width: 1100px; margin: 0 auto; padding: 1rem; display: flex; flex-direction: column; gap: 1rem; }
     header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid var(--surface-elevated); }
     h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); }
 
     button {
       background: var(--surface); color: var(--text); border: 1px solid var(--surface-elevated);
-      padding: 0.65rem 1rem; border-radius: var(--radius); cursor: pointer; font-size: 0.9rem;
-      display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+      padding: 0.6rem 0.8rem; border-radius: var(--radius); cursor: pointer; font-size: 0.85rem;
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; transition: background 0.15s ease;
     }
     button:active { filter: brightness(1.2); }
     .btn-accent { background: var(--accent); color: white; border: none; font-weight: 600; }
     .btn-emergency { background: rgba(239, 68, 68, 0.15); color: var(--danger); border-color: rgba(239, 68, 68, 0.3); }
 
-    /* Bandwidth Toggle */
+    /* Bandwidth Bar */
     .bandwidth-bar { display: flex; gap: 0.5rem; }
     .bandwidth-btn { flex: 1; padding: 0.5rem; font-size: 0.8rem; border-radius: 8px; border: 1px solid var(--surface-elevated); }
     .bandwidth-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
@@ -47,15 +47,40 @@
     .column { background: var(--surface); border-radius: var(--radius); padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; min-height: 250px; }
     .column-header { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; }
 
-    /* Cards */
+    /* Action Cards */
     .action-card {
-      background: var(--surface-elevated); border-radius: 8px; padding: 1rem;
-      display: flex; flex-direction: column; gap: 0.5rem; border-left: 4px solid var(--accent);
+      background: var(--surface-elevated); border-radius: 8px; padding: 0.85rem;
+      display: flex; flex-direction: column; gap: 0.45rem; border-left: 4px solid var(--accent);
     }
     .action-card.hard-anchor { border-left-color: var(--accent-hard); background: #221E18; }
-    .action-title { font-size: 0.95rem; line-height: 1.4; }
+    .action-title { font-size: 0.95rem; line-height: 1.35; }
     .metadata-line { display: flex; gap: 0.4rem; font-size: 0.75rem; color: var(--text-muted); align-items: center; flex-wrap: wrap; }
     .badge { background: var(--bg); padding: 0.2rem 0.45rem; border-radius: 4px; border: 1px solid var(--surface-elevated); }
+    .badge-prio { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+    /* Card Action Toolbar */
+    .card-actions { display: flex; gap: 0.4rem; margin-top: 0.4rem; align-items: center; }
+
+    /* Full Vault Modal / Drawer */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+      z-index: 100; justify-content: center; align-items: flex-end;
+    }
+    @media(min-width: 768px) {
+      .modal-overlay { align-items: center; }
+    }
+    .modal-sheet {
+      background: var(--surface); width: 100%; max-width: 900px; max-height: 85vh;
+      border-radius: var(--radius) var(--radius) 0 0; padding: 1.5rem; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 1rem;
+    }
+    @media(min-width: 768px) {
+      .modal-sheet { border-radius: var(--radius); }
+    }
+    .vault-item {
+      background: var(--surface-elevated); padding: 0.75rem; border-radius: 6px;
+      display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;
+    }
 
     /* Capture Dock */
     .capture-dock {
@@ -73,6 +98,7 @@
   <header>
     <h1>Anchor OS</h1>
     <div style="display: flex; gap: 0.5rem;">
+      <button onclick="App.openVaultView()">🗺️ Full Map (<span id="vault-count">0</span>)</button>
       <button class="btn-emergency" onclick="App.triggerEmergencyReset()">🆘 Reset</button>
       <button onclick="App.openConfigModal()">⚙️</button>
     </div>
@@ -104,16 +130,26 @@
 
   <div class="capture-dock">
     <button id="btn-mic" onclick="App.toggleSpeech()">🎙️</button>
-    <input type="text" id="raw-input" class="capture-input" placeholder="Ambient dump... (e.g. gym, file taxes tomorrow)" onkeydown="if(event.key==='Enter') App.processAmbientDump()">
+    <input type="text" id="raw-input" class="capture-input" placeholder="Ambient dump... (e.g. gym, dentist tomorrow)" onkeydown="if(event.key==='Enter') App.processAmbientDump()">
     <button class="btn-accent" onclick="App.processAmbientDump()">Parse</button>
   </div>
 </div>
 
+<!-- FULL DIARY MAP & INCUBATOR VAULT MODAL -->
+<div id="vault-modal" class="modal-overlay" onclick="if(event.target===this) App.closeVaultView()">
+  <div class="modal-sheet">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--surface-elevated); padding-bottom: 0.5rem;">
+      <h2 style="font-size: 1.1rem; color: var(--accent);">🗺️ Full System Map & Incubator Vault</h2>
+      <button onclick="App.closeVaultView()">✕ Close</button>
+    </div>
+    <p style="font-size: 0.8rem; color: var(--text-muted);">
+      Active WIP cards appear on your main board. Tasks in the Vault rest here safely without visual clutter.
+    </p>
+    <div id="vault-list" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
+  </div>
+</div>
+
 <script>
-/**
- * HYBRID STORAGE ENGINE:
- * Local IndexedDB for instant UI launches + Background Supabase Sync for cross-device state.
- */
 class HybridDB {
   constructor() {
     this.idb = null;
@@ -128,15 +164,11 @@ class HybridDB {
         const db = e.target.result;
         if (!db.objectStoreNames.contains("store")) db.createObjectStore("store", { keyPath: "key" });
       };
-      req.onsuccess = (e) => {
-        this.idb = e.target.result;
-        resolve();
-      };
+      req.onsuccess = (e) => { this.idb = e.target.result; resolve(); };
     });
   }
 
   async get(key) {
-    // 1. Instant local read
     const localVal = await new Promise((res) => {
       const tx = this.idb.transaction("store", "readonly");
       const req = tx.objectStore("store").get(key);
@@ -144,7 +176,6 @@ class HybridDB {
       req.onerror = () => res(null);
     });
 
-    // 2. Refresh from cloud if configured
     if (this.url && this.key) {
       try {
         const resp = await fetch(`${this.url}/rest/v1/anchor_store?key=eq.${encodeURIComponent(key)}`, {
@@ -156,7 +187,7 @@ class HybridDB {
           return cloudData[0].value;
         }
       } catch (e) {
-        console.warn("Cloud read failed; using local fallback:", e);
+        console.warn("Cloud read failed; using local cache", e);
       }
     }
     return localVal;
@@ -186,13 +217,12 @@ class HybridDB {
         body: JSON.stringify({ key, value, updated_at: new Date().toISOString() })
       });
     } catch (e) {
-      console.warn("Cloud write failed; queued locally:", e);
+      console.warn("Cloud write failed", e);
     }
   }
 
   async getAllActions() {
-    const actions = (await this.get("actions_list")) || [];
-    return actions;
+    return (await this.get("actions_list")) || [];
   }
 
   async saveAllActions(actions) {
@@ -200,9 +230,6 @@ class HybridDB {
   }
 }
 
-/**
- * APP CONTROLLER
- */
 class Controller {
   constructor() {
     this.db = new HybridDB();
@@ -240,13 +267,6 @@ class Controller {
 
   async setBandwidth(mode) {
     await this.db.set("daily_bandwidth", mode);
-    ["full", "squeezed", "low"].forEach(id => {
-      const btn = document.getElementById(`bw-${id}`);
-      if (btn) btn.classList.remove("active");
-    });
-    if (mode === "Full Day") document.getElementById("bw-full")?.classList.add("active");
-    if (mode === "Squeezed") document.getElementById("bw-squeezed")?.classList.add("active");
-    if (mode === "Low Bandwidth") document.getElementById("bw-low")?.classList.add("active");
     await this.render();
   }
 
@@ -256,13 +276,11 @@ class Controller {
       this.geminiKey = gemini.trim();
       localStorage.setItem("GEMINI_KEY", this.geminiKey);
     }
-
-    const sbUrl = prompt("Supabase Project URL (e.g. https://xyz.supabase.co):", this.db.url);
+    const sbUrl = prompt("Supabase Project URL:", this.db.url);
     if (sbUrl !== null) {
       this.db.url = sbUrl.trim();
       localStorage.setItem("SB_URL", this.db.url);
     }
-
     const sbKey = prompt("Supabase Anon Key:", this.db.key);
     if (sbKey !== null) {
       this.db.key = sbKey.trim();
@@ -271,37 +289,8 @@ class Controller {
     this.render();
   }
 
-  toggleSpeech() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return alert("Speech recognition not supported on this browser.");
-
-    if (this.recognition) {
-      this.recognition.stop();
-      this.recognition = null;
-      document.getElementById("btn-mic").innerText = "🎙️";
-      return;
-    }
-
-    this.recognition = new SpeechRecognition();
-    this.recognition.onstart = () => { document.getElementById("btn-mic").innerText = "🛑"; };
-    this.recognition.onresult = (e) => {
-      document.getElementById("raw-input").value = e.results[0][0].transcript;
-      this.processAmbientDump();
-    };
-    this.recognition.onerror = () => { this.recognition = null; document.getElementById("btn-mic").innerText = "🎙️"; };
-    this.recognition.onend = () => { this.recognition = null; document.getElementById("btn-mic").innerText = "🎙️"; };
-    this.recognition.start();
-  }
-
-// Resilient multi-model caller with automatic fallback
   async callGemini(payload) {
-    const candidateModels = [
-      "gemini-flash-latest",
-      "gemini-2.5-flash",
-      "gemini-2.0-flash",
-      "gemini-1.5-flash-latest"
-    ];
-
+    const candidateModels = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-latest"];
     let lastError = null;
 
     for (const model of candidateModels) {
@@ -311,40 +300,30 @@ class Controller {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
-
         const json = await res.json();
         if (json.error) {
-          // If model was not found, fall through to try next candidate
           if (json.error.code === 404 || json.error.message?.includes("not found")) {
             lastError = json.error.message;
             continue;
           }
           throw new Error(json.error.message);
         }
-
         if (json.candidates?.[0]?.content?.parts?.[0]?.text) {
           return JSON.parse(json.candidates[0].content.parts[0].text);
         }
       } catch (err) {
-        if (err.message && !err.message.includes("not found")) {
-          throw err;
-        }
+        if (err.message && !err.message.includes("not found")) throw err;
         lastError = err.message;
       }
     }
-
-    throw new Error(lastError || "Could not find a supported Gemini model for this API key.");
+    throw new Error(lastError || "Could not find a supported Gemini model.");
   }
 
   async processAmbientDump() {
     const field = document.getElementById("raw-input");
     const text = field.value.trim();
     if (!text) return;
-
-    if (!this.geminiKey) {
-      this.openConfigModal();
-      if (!this.geminiKey) return;
-    }
+    if (!this.geminiKey) { this.openConfigModal(); if (!this.geminiKey) return; }
 
     field.value = "Parsing intent...";
     field.disabled = true;
@@ -419,7 +398,45 @@ class Controller {
     }
   }
 
-async shrinkStep(id) {
+  // Defer / Snooze an item back into the vault
+  async deferAction(id) {
+    const actions = await this.db.getAllActions();
+    const action = actions.find(a => a.id === id);
+    if (action) {
+      action.defer_count = (action.defer_count || 0) + 1;
+      action.last_deferred_at = new Date().toISOString();
+      await this.db.saveAllActions(actions);
+      await this.render();
+    }
+  }
+
+  // Edit action details directly
+  async editAction(id) {
+    const actions = await this.db.getAllActions();
+    const action = actions.find(a => a.id === id);
+    if (!action) return;
+
+    const newTitle = prompt("Edit action title:", action.title);
+    if (newTitle === null) return;
+    const newMins = prompt("Estimated minutes:", action.estimated_mins);
+    if (newMins === null) return;
+
+    action.title = newTitle.trim() || action.title;
+    action.estimated_mins = parseInt(newMins) || action.estimated_mins;
+    await this.db.saveAllActions(actions);
+    await this.render();
+  }
+
+  async deleteAction(id) {
+    if (!confirm("Permanently delete this task?")) return;
+    let actions = await this.db.getAllActions();
+    actions = actions.filter(a => a.id !== id);
+    await this.db.saveAllActions(actions);
+    await this.render();
+    this.openVaultView();
+  }
+
+  async shrinkStep(id) {
     if (!this.geminiKey) { this.openConfigModal(); return; }
     const actions = await this.db.getAllActions();
     const action = actions.find(a => a.id === id);
@@ -441,7 +458,6 @@ async shrinkStep(id) {
           }
         }
       });
-
       action.title = output.micro_step;
       action.estimated_mins = 2;
       await this.db.saveAllActions(actions);
@@ -460,24 +476,99 @@ async shrinkStep(id) {
     await this.setBandwidth("Low Bandwidth");
   }
 
+  toggleSpeech() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return alert("Speech recognition not supported on this browser.");
+
+    if (this.recognition) {
+      this.recognition.stop();
+      this.recognition = null;
+      document.getElementById("btn-mic").innerText = "🎙️";
+      return;
+    }
+
+    this.recognition = new SpeechRecognition();
+    this.recognition.onstart = () => { document.getElementById("btn-mic").innerText = "🛑"; };
+    this.recognition.onresult = (e) => {
+      document.getElementById("raw-input").value = e.results[0][0].transcript;
+      this.processAmbientDump();
+    };
+    this.recognition.onerror = () => { this.recognition = null; document.getElementById("btn-mic").innerText = "🎙️"; };
+    this.recognition.onend = () => { this.recognition = null; document.getElementById("btn-mic").innerText = "🎙️"; };
+    this.recognition.start();
+  }
+
+  // DIARY MAP / INCUBATOR DRAWER
+  async openVaultView() {
+    const actions = await this.db.getAllActions();
+    const vaultList = document.getElementById("vault-list");
+    vaultList.innerHTML = "";
+
+    if (actions.length === 0) {
+      vaultList.innerHTML = "<div style='color:var(--text-muted);'>Vault is completely empty.</div>";
+    } else {
+      actions.forEach(act => {
+        const item = document.createElement("div");
+        item.className = "vault-item";
+        item.innerHTML = `
+          <div>
+            <div style="font-size:0.9rem; ${act.is_completed ? 'text-decoration: line-through; opacity:0.5;' : ''}">${act.title}</div>
+            <div class="metadata-line">
+              <span class="badge">${act.domain}</span>
+              <span class="badge">⏱️ ${act.estimated_mins}m</span>
+              ${act.is_hard_deadline ? '<span class="badge" style="color:var(--accent-hard);">⚓ Hard Target</span>' : ''}
+              ${act.defer_count > 0 ? `<span class="badge">Snoozed: ${act.defer_count}x</span>` : ''}
+            </div>
+          </div>
+          <div style="display:flex; gap:0.4rem;">
+            <button onclick="App.editAction('${act.id}')">✏️</button>
+            <button onclick="App.deleteAction('${act.id}')">🗑️</button>
+          </div>
+        `;
+        vaultList.appendChild(item);
+      });
+    }
+
+    document.getElementById("vault-modal").style.display = "flex";
+  }
+
+  closeVaultView() {
+    document.getElementById("vault-modal").style.display = "none";
+  }
+
+  // PRIORITIZATION SCORING FORMULA
+  calculatePriorityScore(action, todayStr) {
+    let score = 0;
+    if (action.is_hard_deadline && action.due_date && action.due_date <= todayStr) {
+      score += 1000;
+    } else if (action.due_date && action.due_date <= todayStr) {
+      score += 500;
+    }
+    // Lowest activation energy wins
+    score += (100 - (action.estimated_mins || 10));
+    // Quietly demote deferred zombie tasks
+    score -= ((action.defer_count || 0) * 15);
+    return score;
+  }
+
   async render() {
     const actions = await this.db.getAllActions();
     const bandwidth = (await this.db.get("daily_bandwidth")) || "Full Day";
     const todayStr = new Date().toISOString().split("T")[0];
 
-    // Highlight active bandwidth tab
+    // Update Bandwidth Tabs
     ["full", "squeezed", "low"].forEach(id => document.getElementById(`bw-${id}`)?.classList.remove("active"));
     if (bandwidth === "Full Day") document.getElementById("bw-full")?.classList.add("active");
     if (bandwidth === "Squeezed") document.getElementById("bw-squeezed")?.classList.add("active");
     if (bandwidth === "Low Bandwidth") document.getElementById("bw-low")?.classList.add("active");
 
     const incomplete = actions.filter(a => !a.is_completed);
+    document.getElementById("vault-count").innerText = incomplete.length;
 
-    // Hard Deadlines seize priority
-    const hardAnchors = incomplete.filter(a => a.is_hard_deadline && a.due_date && a.due_date <= todayStr);
-    const standardActions = incomplete.filter(a => !hardAnchors.includes(a));
+    // Sort every task transparently using priority score
+    incomplete.sort((a, b) => this.calculatePriorityScore(b, todayStr) - this.calculatePriorityScore(a, todayStr));
 
-    // Dynamic slot caps based on mid-day energy
+    // Dynamic slot caps based on energy
     let limits = { "Work": 2, "Personal Growth": 1, "Health": 1 };
     if (bandwidth === "Squeezed") limits = { "Work": 1, "Personal Growth": 0, "Health": 1 };
     if (bandwidth === "Low Bandwidth") limits = { "Work": 1, "Personal Growth": 0, "Health": 0 };
@@ -493,31 +584,36 @@ async shrinkStep(id) {
       const counter = document.getElementById(d.countEl);
       container.innerHTML = "";
 
-      const domainHard = hardAnchors.filter(a => a.domain === d.name);
-      const domainStd = standardActions.filter(a => a.domain === d.name);
-
-      // Hard anchors always sit in Slot 1
-      const prioritized = [...domainHard, ...domainStd];
+      const domainActions = incomplete.filter(a => a.domain === d.name);
       const maxSlots = limits[d.name];
-      const visible = prioritized.slice(0, maxSlots);
+      const visible = domainActions.slice(0, maxSlots);
 
       counter.innerText = `${visible.length}/${maxSlots}`;
 
       visible.forEach(act => {
         const isHard = act.is_hard_deadline && act.due_date && act.due_date <= todayStr;
         const buffered = Math.round(act.estimated_mins * 1.5);
+        
+        // Priority reason indicator
+        let prioReason = "📦 Next in Queue";
+        if (isHard) prioReason = "⚓ Hard Target";
+        else if (act.estimated_mins <= 10) prioReason = "⚡ Quick Win";
+
         const card = document.createElement("div");
         card.className = `action-card ${isHard ? 'hard-anchor' : ''}`;
         card.innerHTML = `
-          <div class="action-title">${isHard ? '⚓ <strong>[Hard Deadline]</strong> ' : ''}${act.title}</div>
+          <div class="action-title">${act.title}</div>
           <div class="metadata-line">
+            <span class="badge badge-prio">${prioReason}</span>
             <span class="badge">⏱️ ${act.estimated_mins}m (Buf: ${buffered}m)</span>
             ${act.batch_type !== "None" ? `<span class="badge">🏷️ ${act.batch_type}</span>` : ""}
-            ${isHard ? `<span class="badge" style="color:var(--accent-hard)">Target Today</span>` : ""}
+            ${act.defer_count > 0 ? `<span class="badge">Snoozed: ${act.defer_count}x</span>` : ""}
           </div>
-          <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-            <button class="btn-accent" style="flex:1;" onclick="App.completeAction('${act.id}')">✓ Done</button>
-            <button style="padding: 0.5rem;" title="Micro-slice" onclick="App.shrinkStep('${act.id}')">✂️</button>
+          <div class="card-actions">
+            <button class="btn-accent" style="flex:2;" onclick="App.completeAction('${act.id}')">✓ Done</button>
+            <button style="flex:1;" title="Micro-slice step" onclick="App.shrinkStep('${act.id}')">✂️ Shrink</button>
+            <button title="Snooze/Defer back to vault" onclick="App.deferAction('${act.id}')">💤</button>
+            <button title="Edit title or estimate" onclick="App.editAction('${act.id}')">✏️</button>
           </div>
         `;
         container.appendChild(card);
